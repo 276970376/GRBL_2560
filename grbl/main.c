@@ -20,6 +20,7 @@
 */
 
 #include "grbl.h"
+#include "jogging.h"
 
 
 // Declare system global variable structure
@@ -70,6 +71,8 @@ int main(void)
     probe_init();
     plan_reset(); // Clear block buffer and planner variables
     st_reset(); // Clear stepper subsystem variables.
+    jog_init(); // by hdo
+
 
     // Sync cleared gcode and planner positions to current system position.
     plan_sync_position();
