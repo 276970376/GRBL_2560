@@ -27,6 +27,8 @@
 #define JOG_SCL       0
 #define JOG_SDA       1
 
+#define WIIEXT_TWI_ADDR 0x52 // this is the I2C slave address of any Wiimote extensions
+
 // initialize the jogging module
 void jog_init();
 
