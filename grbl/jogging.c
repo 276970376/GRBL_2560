@@ -22,6 +22,7 @@
 #include <avr/interrupt.h>
 #include "jogging.h"
 #include "twi.h"
+#include "print.h"
 
 
 // index 4
@@ -47,6 +48,7 @@ volatile uint32_t ticks;
 volatile uint32_t wait_ticks;
 uint8_t twiBuffer[8];
 
+
 // called every 10ms
 ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
 	ticks++;
@@ -55,17 +57,19 @@ ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
 
 
 void init_systicks() {
-	TCCR5B = _BV(CS52) | _BV(CS51) | _BV(CS50); // prescale 1024
-	TCCR5A = _BV(WGM51);    // MODE CTC
+	TCCR5B = _BV(CS52) | _BV(CS50) | _BV(WGM52); // prescale 1024 and MODE CTC
+	TCCR5A = 0; // MODE CTC (see datasheet)
 	TIMSK5 = (1 << OCIE5A); // enable compare match interrupt
 
 	// 16000000/1024/156 == 100HZ -> 10 ms
 	OCR5A = 155; // !!! must me set last or it will not work!
 }
 
+
 void jog_init() {
 	init_systicks();
 
+	/*
 	// Initialize jog switch port bits and DDR
 	JOG_DDR &= ~(_BV(JOG_SDA) | _BV(JOG_SCL)); // TWI pins as input
 	JOG_PORT |= _BV(JOG_SDA) | _BV(JOG_SCL);   // Enable internal pull-up resistors. Active low operation.
@@ -91,7 +95,7 @@ void jog_init() {
 	twiBuffer[0] = 0x00;
 	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
-
+*/
 	/*
 	int centerLeftX = (int)((twiBuffer[0] & 0x3F) << 2);
 	int centerLeftY = (int)((twiBuffer[1] & 0x3F) << 2);
@@ -108,8 +112,12 @@ uint8_t is_button_down(uint8_t index, uint8_t button_bit) {
 void jogging()  {
 
 	// only process jogging each 50ms
-	if (wait_ticks > 5) {
+	if (wait_ticks > 100) {
 		wait_ticks = 0;
+
+		printString("J\r\n");
+
+		/*
 		// read raw values
 		twiBuffer[0] = 0x00;
 		twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
@@ -127,5 +135,6 @@ void jogging()  {
 		else if (is_button_down(5, BTN_D_UP)) {
 
 		}
+		*/
 	}
 }
