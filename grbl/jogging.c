@@ -43,10 +43,29 @@
 #define BTN_D_LEFT 1
 #define BTN_D_UP 0
 
-
+volatile uint32_t ticks;
+volatile uint32_t wait_ticks;
 uint8_t twiBuffer[8];
 
+// called every 10ms
+ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
+	ticks++;
+	wait_ticks++;
+}
+
+
+void init_systicks() {
+	TCCR5B = _BV(CS52) | _BV(CS51) | _BV(CS50); // prescale 1024
+	TCCR5A = _BV(WGM51);    // MODE CTC
+	TIMSK5 = (1 << OCIE5A); // enable compare match interrupt
+
+	// 16000000/1024/156 == 100HZ -> 10 ms
+	OCR5A = 155; // !!! must me set last or it will not work!
+}
+
 void jog_init() {
+	init_systicks();
+
 	// Initialize jog switch port bits and DDR
 	JOG_DDR &= ~(_BV(JOG_SDA) | _BV(JOG_SCL)); // TWI pins as input
 	JOG_PORT |= _BV(JOG_SDA) | _BV(JOG_SCL);   // Enable internal pull-up resistors. Active low operation.
@@ -88,21 +107,25 @@ uint8_t is_button_down(uint8_t index, uint8_t button_bit) {
 
 void jogging()  {
 
-	// read raw values
-	twiBuffer[0] = 0x00;
-	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
-	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+	// only process jogging each 50ms
+	if (wait_ticks > 5) {
+		wait_ticks = 0;
+		// read raw values
+		twiBuffer[0] = 0x00;
+		twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
+		twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
 
-	if (is_button_down(4, BTN_D_RIGHT)) {
+		if (is_button_down(4, BTN_D_RIGHT)) {
 
-	}
-	else if (is_button_down(4, BTN_D_DOWN)) {
+		}
+		else if (is_button_down(4, BTN_D_DOWN)) {
 
-	}
-	else if (is_button_down(5, BTN_D_LEFT)) {
+		}
+		else if (is_button_down(5, BTN_D_LEFT)) {
 
-	}
-	else if (is_button_down(5, BTN_D_UP)) {
+		}
+		else if (is_button_down(5, BTN_D_UP)) {
 
+		}
 	}
 }
