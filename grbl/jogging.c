@@ -28,7 +28,7 @@
 #include "gcode.h"
 
 
-#define PLANNER_BLOCK_COUNT_TRESHOLD 5
+#define PLANNER_BLOCK_COUNT_TRESHOLD 3
 #define MOTION_PLUS_ADR_ENABLE 0x53 // 0x53 << 1 = 0xA6
 #define MOTION_PLUS_ADR 0x52        // 0x52 << 1 = 0xA4
 #define GBUFFER_SIZE 32
