@@ -83,6 +83,7 @@ char gbuffer[32];
 uint8_t gbuffer_index = 0;
 uint8_t min_wait_ticks = DEFAULT_WAIT_TICKS;
 uint8_t controllerEnabled = 0; // jogging disabled if no controller is found
+uint8_t home_button_counter = 0;
 
 // called every 10ms
 ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
@@ -323,7 +324,7 @@ void jogging()  {
 	}
 	*/
 
-	// only process jogging each 50ms
+	// only process jogging each x ticks
 	if (wait_ticks > min_wait_ticks) {
 		wait_ticks = 0;
 
@@ -348,46 +349,91 @@ void jogging()  {
 		// debug button output
 		//debug_buttons();
 
-		// default step width is 0.2
-		char* step_width = "0.1";
-		gbuffer_reset();
 
-		// check whether accelerated step width is selected
-		if (is_button_down(BTN_A)) {
-			step_width = "1.0";
-		}
-		else if (is_button_down(BTN_B)) {
-			step_width = "0.5";
-		}
+		// handle home button separately
+		// if home button is pressed don't allow jogging
+		if (is_button_down(BTN_HOME)) {
+			home_button_counter++;
+			// if home button is pressed longer than (2 seconds)
+			// set zero for xyz
+			if (home_button_counter > 20) {
+				gc_execute_line("G92X0Y0Z0");
+				home_button_counter = 0;
+			}
 
-		if (is_button_down(BTN_D_RIGHT)) {
-			gbuffer_push("G91G0X");
-			gbuffer_push(step_width);
-			gc_execute_line(gbuffer);
+			// also allow quick reset for all axis
+			if (is_button_down(BTN_A)) {
+				gc_execute_line("G92X0Y0Z0");
+				home_button_counter = 0;
+			}
+
+
+			if (is_button_down(BTN_D_LEFT) || is_button_down(BTN_D_RIGHT)) {
+				// reset counter to prevent reset of all axis
+				home_button_counter = 0;
+				// reset x-axis
+				gc_execute_line("G10P0L20X0");
+			}
+
+			if (is_button_down(BTN_D_UP) || is_button_down(BTN_D_DOWN)) {
+				// reset counter to prevent reset of all axis
+				home_button_counter = 0;
+				// reset y-axis
+				gc_execute_line("G10P0L20Y0");
+			}
+
+			if (is_button_down(BTN_ZL) || is_button_down(BTN_ZR)) {
+				// reset counter to prevent reset of all axis
+				home_button_counter = 0;
+				// reset z-axis
+				gc_execute_line("G10P0L20Z0");
+			}
+
 		}
-		else if (is_button_down(BTN_D_DOWN)) {
-			gbuffer_push("G91G0Y-");
-			gbuffer_push(step_width);
-			gc_execute_line(gbuffer);
-		}
-		else if (is_button_down(BTN_D_LEFT)) {
-			gbuffer_push("G91G0X-");
-			gbuffer_push(step_width);
-			gc_execute_line(gbuffer);
-		}
-		else if (is_button_down(BTN_D_UP)) {
-			gbuffer_push("G91G0Y");
-			gbuffer_push(step_width);
-			gc_execute_line(gbuffer);
-		}
-		else if (is_button_down(BTN_ZL)) {
-			gc_execute_line("G91G0Z-0.2");
-		}
-		else if (is_button_down(BTN_ZR)) {
-			gc_execute_line("G91G0Z0.2");
-		}
-		else if (is_button_down(BTN_HOME)) {
-			gc_execute_line("G92X0Y0Z0");
+		else {
+			home_button_counter = 0;
+
+			// default step width is 0.2
+			char* step_width = "0.1";
+			gbuffer_reset();
+
+			// check whether accelerated step width is selected
+			if (is_button_down(BTN_A)) {
+				step_width = "1.0";
+			}
+			else if (is_button_down(BTN_B)) {
+				step_width = "0.5";
+			}
+
+			if (is_button_down(BTN_D_RIGHT)) {
+				gbuffer_push("G91G0X");
+				gbuffer_push(step_width);
+				gc_execute_line(gbuffer);
+			}
+			else if (is_button_down(BTN_D_DOWN)) {
+				gbuffer_push("G91G0Y-");
+				gbuffer_push(step_width);
+				gc_execute_line(gbuffer);
+			}
+			else if (is_button_down(BTN_D_LEFT)) {
+				gbuffer_push("G91G0X-");
+				gbuffer_push(step_width);
+				gc_execute_line(gbuffer);
+			}
+			else if (is_button_down(BTN_D_UP)) {
+				gbuffer_push("G91G0Y");
+				gbuffer_push(step_width);
+				gc_execute_line(gbuffer);
+			}
+			else if (is_button_down(BTN_ZL)) {
+				gc_execute_line("G91G0Z-0.2");
+			}
+			else if (is_button_down(BTN_ZR)) {
+				gc_execute_line("G91G0Z0.2");
+			}
+			//else if (is_button_down(BTN_HOME)) {
+			//	gc_execute_line("G92X0Y0Z0");
+			//}
 		}
 	}
 }
