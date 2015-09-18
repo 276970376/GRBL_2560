@@ -34,7 +34,6 @@ int main(void)
   settings_init(); // Load Grbl settings from EEPROM
   stepper_init();  // Configure stepper pins and interrupt timers
   system_init();   // Configure pinout pins and pin-change interrupt
-  jog_init(); // by hdo
   
 
   memset(&sys, 0, sizeof(sys));  // Clear all system variables
@@ -57,6 +56,7 @@ int main(void)
     sys.state = STATE_ALARM;
   #endif
   
+
   // Grbl initialization loop upon power-up or a system abort. For the latter, all processes
   // will return to this loop to be cleanly re-initialized.
   for(;;) {
@@ -74,6 +74,7 @@ int main(void)
     plan_reset(); // Clear block buffer and planner variables
     st_reset(); // Clear stepper subsystem variables.
 
+    jog_init(); // by hdo
 
     // Sync cleared gcode and planner positions to current system position.
     plan_sync_position();
