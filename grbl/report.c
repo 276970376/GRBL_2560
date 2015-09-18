@@ -28,6 +28,7 @@
 
 #include "grbl.h"
 
+uint8_t controllerAvailble = 0;
 
 // Handles the primary confirmation protocol response for streaming interfaces and human-feedback.
 // For every incoming line, this method responds with an 'ok' for a successful command or an 
@@ -258,6 +259,10 @@ void report_grbl_settings() {
     }
     val += AXIS_SETTINGS_INCREMENT;
   }  
+
+  printString("Controller=");
+  print_uint8_base10(controllerAvailble);
+  printString("\r\n");
 }
 
 
@@ -508,3 +513,8 @@ void report_realtime_status()
   
   printPgmString(PSTR(">\r\n"));
 }
+
+void report_set_controller_available(uint8_t status) {
+	controllerAvailble = status;
+}
+
