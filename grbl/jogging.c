@@ -31,6 +31,7 @@
 #define PLANNER_BLOCK_COUNT_TRESHOLD 5
 #define MOTION_PLUS_ADR_ENABLE 0x53 // 0x53 << 1 = 0xA6
 #define MOTION_PLUS_ADR 0x52        // 0x52 << 1 = 0xA4
+#define GBUFFER_SIZE 32
 
 // index 4
 #define DATA_D_RIGHT 7
@@ -73,12 +74,25 @@
 volatile uint32_t ticks;
 volatile uint32_t wait_ticks;
 uint8_t twiBuffer[8];
-
+char gbuffer[32];
+uint8_t gbuffer_index = 0;
 
 // called every 10ms
 ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
 	ticks++;
 	wait_ticks++;
+}
+
+
+void gbuffer_reset() {
+	gbuffer_index = 0;
+}
+
+void gbuffer_push(char* data) {
+	while (*data && gbuffer_index < GBUFFER_SIZE) {
+		gbuffer[gbuffer_index++] = *data++;
+	}
+	gbuffer[gbuffer_index] = 0; // 0 terminated string
 }
 
 
@@ -274,10 +288,12 @@ void debug_buttons() {
 	}
 }
 
+
+
 void jogging()  {
 
 	// only process jogging each 50ms
-	if (wait_ticks > 5) {
+	if (wait_ticks > 10) {
 		wait_ticks = 0;
 
 		//printString("J\r\n");
@@ -301,17 +317,36 @@ void jogging()  {
 		// debug button output
 		//debug_buttons();
 
+		// default step width is 0.2
+		char* step_width = "0.1";
+		gbuffer_reset();
+
+		// check whether accelerated step width is selected
+		if (is_button_down(BTN_A)) {
+			step_width = "1.0";
+		}
+		else if (is_button_down(BTN_B)) {
+			step_width = "0.5";
+		}
 		if (is_button_down(BTN_D_RIGHT)) {
-			gc_execute_line("G91G0X0.2");
+			gbuffer_push("G91G0X");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
 		}
 		else if (is_button_down(BTN_D_DOWN)) {
-			gc_execute_line("G91G0Y-0.2");
+			gbuffer_push("G91G0Y-");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
 		}
 		else if (is_button_down(BTN_D_LEFT)) {
-			gc_execute_line("G91G0X-0.2");
+			gbuffer_push("G91G0X-");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
 		}
 		else if (is_button_down(BTN_D_UP)) {
-			gc_execute_line("G91G0Y0.2");
+			gbuffer_push("G91G0Y");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
 		}
 		else if (is_button_down(BTN_ZL)) {
 			gc_execute_line("G91G0Z-0.2");
