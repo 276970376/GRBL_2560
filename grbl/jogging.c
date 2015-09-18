@@ -431,9 +431,6 @@ void jogging()  {
 			else if (is_button_down(BTN_ZR)) {
 				gc_execute_line("G91G0Z0.2");
 			}
-			//else if (is_button_down(BTN_HOME)) {
-			//	gc_execute_line("G92X0Y0Z0");
-			//}
 		}
 	}
 }
