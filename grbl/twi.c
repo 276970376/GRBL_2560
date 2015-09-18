@@ -322,7 +322,7 @@ void twi_releaseBus(void)
   twi_state = TWI_READY;
 }
 
-SIGNAL(TWI_vect)
+ISR(TWI_vect, ISR_BLOCK)
 {
   switch(TW_STATUS){
     // All Master
