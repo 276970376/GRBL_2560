@@ -26,12 +26,15 @@
 #include "nuts_bolts.h"
 #include "planner.h"
 #include "gcode.h"
+#include "report.h"
 
 
 #define PLANNER_BLOCK_COUNT_TRESHOLD 3
 #define MOTION_PLUS_ADR_ENABLE 0x53 // 0x53 << 1 = 0xA6
 #define MOTION_PLUS_ADR 0x52        // 0x52 << 1 = 0xA4
 #define GBUFFER_SIZE 32
+#define DEFAULT_WAIT_TICKS 10
+#define DEBOUNCE_WAIT_TICKS 30
 
 // index 4
 #define DATA_D_RIGHT 7
@@ -73,14 +76,19 @@
 
 volatile uint32_t ticks;
 volatile uint32_t wait_ticks;
+volatile uint32_t idle_ticks;
+
 uint8_t twiBuffer[8];
 char gbuffer[32];
 uint8_t gbuffer_index = 0;
+uint8_t min_wait_ticks = DEFAULT_WAIT_TICKS;
+uint8_t controllerEnabled = 0; // jogging disabled if no controller is found
 
 // called every 10ms
 ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
 	ticks++;
 	wait_ticks++;
+	idle_ticks++;
 }
 
 
@@ -161,13 +169,27 @@ void jog_init() {
 	_delay_us(200);
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
 
+	// only enable jogging if controller was found
+	// Wii Classic Controller has ID: 0x0000A4200101
+	if (twiBuffer[4] == 1 && twiBuffer[5] == 1) {
+		controllerEnabled = 1;
+	}
+
+	// the following is not clean but useful to see:
+	// set status for report (via $$)
+	report_set_controller_available(controllerEnabled);
+
+
 	//print_buffer();
 
+
+	// initial read out
 	_delay_us(500);
 	twiBuffer[0] = 0x0;
 	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
 	_delay_ms(1); // the nunchuk needs some time to process
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
 
 	//print_buffer();
 
@@ -291,9 +313,18 @@ void debug_buttons() {
 
 
 void jogging()  {
+	if (!controllerEnabled) {
+		return;
+	}
+
+	/*
+	if (idle_ticks > 500) {
+		min_wait_ticks = DEFAULT_WAIT_TICKS;
+	}
+	*/
 
 	// only process jogging each 50ms
-	if (wait_ticks > 10) {
+	if (wait_ticks > min_wait_ticks) {
 		wait_ticks = 0;
 
 		//printString("J\r\n");
@@ -328,6 +359,7 @@ void jogging()  {
 		else if (is_button_down(BTN_B)) {
 			step_width = "0.5";
 		}
+
 		if (is_button_down(BTN_D_RIGHT)) {
 			gbuffer_push("G91G0X");
 			gbuffer_push(step_width);
