@@ -23,8 +23,12 @@
 #include "jogging.h"
 #include "twi.h"
 #include "print.h"
+#include "nuts_bolts.h"
+#include "planner.h"
+#include "gcode.h"
 
 
+#define PLANNER_BLOCK_COUNT_TRESHOLD 5
 #define MOTION_PLUS_ADR_ENABLE 0x53 // 0x53 << 1 = 0xA6
 #define MOTION_PLUS_ADR 0x52        // 0x52 << 1 = 0xA4
 
@@ -143,7 +147,7 @@ void jog_init() {
 	_delay_us(200);
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
 
-	print_buffer();
+	//print_buffer();
 
 	_delay_us(500);
 	twiBuffer[0] = 0x0;
@@ -151,7 +155,7 @@ void jog_init() {
 	_delay_ms(1); // the nunchuk needs some time to process
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
 
-	print_buffer();
+	//print_buffer();
 
 
 
@@ -222,13 +226,67 @@ uint8_t is_button_down(uint8_t button) {
 	return 0;
 }
 
+void debug_buttons() {
+	if (is_button_down(BTN_D_RIGHT)) {
+		printString("DR\r\n");
+	}
+	else if (is_button_down(BTN_D_DOWN)) {
+		printString("DD\r\n");
+	}
+	else if (is_button_down(BTN_D_LEFT)) {
+		printString("DL\r\n");
+	}
+	else if (is_button_down(BTN_D_UP)) {
+		printString("DU\r\n");
+	}
+	else if (is_button_down(BTN_A)) {
+		printString("A\r\n");
+	}
+	else if (is_button_down(BTN_B)) {
+		printString("B\r\n");
+	}
+	else if (is_button_down(BTN_X)) {
+		printString("X\r\n");
+	}
+	else if (is_button_down(BTN_Y)) {
+		printString("Y\r\n");
+	}
+	else if (is_button_down(BTN_LT)) {
+		printString("LT\r\n");
+	}
+	else if (is_button_down(BTN_RT)) {
+		printString("RT\r\n");
+	}
+	else if (is_button_down(BTN_MINUS)) {
+		printString("-\r\n");
+	}
+	else if (is_button_down(BTN_PLUS)) {
+		printString("+\r\n");
+	}
+	else if (is_button_down(BTN_HOME)) {
+		printString("H\r\n");
+	}
+	else if (is_button_down(BTN_ZL)) {
+		printString("ZL\r\n");
+	}
+	else if (is_button_down(BTN_ZR)) {
+		printString("ZR\r\n");
+	}
+}
+
 void jogging()  {
 
 	// only process jogging each 50ms
-	if (wait_ticks > 100) {
+	if (wait_ticks > 5) {
 		wait_ticks = 0;
 
-		printString("J\r\n");
+		//printString("J\r\n");
+
+		// Only process jogging when buffer es empty or partially filled
+		if (plan_get_block_buffer_count() > PLANNER_BLOCK_COUNT_TRESHOLD) {
+			return;
+		}
+
 
 		// read raw values
 		twiBuffer[0] = 0x00;
@@ -237,52 +295,23 @@ void jogging()  {
 		// apparently the extension need some time to process the data
 		_delay_us(500);
 		twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
-		print_buffer();
+
+		//print_buffer();
+
+		// debug button output
+		//debug_buttons();
 
 		if (is_button_down(BTN_D_RIGHT)) {
-			printString("DR\r\n");
+			gc_execute_line("G91G0X0.2");
 		}
 		else if (is_button_down(BTN_D_DOWN)) {
-			printString("DD\r\n");
+			gc_execute_line("G91G0Y-0.2");
 		}
 		else if (is_button_down(BTN_D_LEFT)) {
-			printString("DL\r\n");
+			gc_execute_line("G91G0X-0.2");
 		}
 		else if (is_button_down(BTN_D_UP)) {
-			printString("DU\r\n");
-		}
-		else if (is_button_down(BTN_A)) {
-			printString("A\r\n");
-		}
-		else if (is_button_down(BTN_B)) {
-			printString("B\r\n");
-		}
-		else if (is_button_down(BTN_X)) {
-			printString("X\r\n");
-		}
-		else if (is_button_down(BTN_Y)) {
-			printString("Y\r\n");
-		}
-		else if (is_button_down(BTN_LT)) {
-			printString("LT\r\n");
-		}
-		else if (is_button_down(BTN_RT)) {
-			printString("RT\r\n");
-		}
-		else if (is_button_down(BTN_MINUS)) {
-			printString("-\r\n");
-		}
-		else if (is_button_down(BTN_PLUS)) {
-			printString("+\r\n");
-		}
-		else if (is_button_down(BTN_HOME)) {
-			printString("H\r\n");
-		}
-		else if (is_button_down(BTN_ZL)) {
-			printString("ZL\r\n");
-		}
-		else if (is_button_down(BTN_ZR)) {
-			printString("ZR\r\n");
+			gc_execute_line("G91G0Y0.2");
 		}
 
 	}
