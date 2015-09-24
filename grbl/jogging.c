@@ -29,12 +29,27 @@
 #include "report.h"
 
 
+// WII Extension Controller ID
+// see http://wiibrew.org/wiki/Wiimote/Extension_Controllers
+
+#define ID_NUN_CHUK_CONTROLLER 0xA4200000
+#define ID_CLASSIC_CONTROLLER 0xA4200101
+
+#define CONTROLLER_NONE 0
+#define CONTROLLER_NUN_CHUK 1
+#define CONTROLLER_CLASSIC 2
+
+
 #define PLANNER_BLOCK_COUNT_TRESHOLD 3
 #define MOTION_PLUS_ADR_ENABLE 0x53 // 0x53 << 1 = 0xA6
 #define MOTION_PLUS_ADR 0x52        // 0x52 << 1 = 0xA4
 #define GBUFFER_SIZE 32
 #define DEFAULT_WAIT_TICKS 10
+//#define DEFAULT_WAIT_TICKS 100
 #define DEBOUNCE_WAIT_TICKS 30
+
+
+
 
 // index 4
 #define DATA_D_RIGHT 7
@@ -84,6 +99,8 @@ uint8_t gbuffer_index = 0;
 uint8_t min_wait_ticks = DEFAULT_WAIT_TICKS;
 uint8_t controllerEnabled = 0; // jogging disabled if no controller is found
 uint8_t home_button_counter = 0;
+
+uint8_t calib_x1,calib_y1,calib_x2,calib_y2 = 0; // calibration values for joysticks
 
 // called every 10ms
 ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
@@ -170,19 +187,24 @@ void jog_init() {
 	_delay_us(200);
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
 
-	// only enable jogging if controller was found
-	// Wii Classic Controller has ID: 0x0000A4200101
-	if (twiBuffer[4] == 1 && twiBuffer[5] == 1) {
-		controllerEnabled = 1;
+	// test id value of controller
+	uint32_t id_value = ((uint32_t) twiBuffer[2] << 24) + ((uint32_t) twiBuffer[3] << 16) + ((uint32_t)twiBuffer[4] << 8) + ((uint32_t)twiBuffer[5]);
+
+	//print_uint32_base10(id_value);
+
+	controllerEnabled = CONTROLLER_NONE;
+	if (id_value == ID_NUN_CHUK_CONTROLLER) {
+		controllerEnabled = CONTROLLER_NUN_CHUK;
+	}
+	else if (id_value == ID_CLASSIC_CONTROLLER) {
+		controllerEnabled = CONTROLLER_CLASSIC;
 	}
 
 	// the following is not clean but useful to see:
 	// set status for report (via $$)
 	report_set_controller_available(controllerEnabled);
 
-
 	//print_buffer();
-
 
 	// initial read out
 	_delay_us(500);
@@ -190,6 +212,11 @@ void jog_init() {
 	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
 	_delay_ms(1); // the nunchuk needs some time to process
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
+
+	switch(controllerEnabled) {
+	case CONTROLLER_NUN_CHUK : calib_x1 = twiBuffer[0]; calib_y1 = twiBuffer[1];
+	}
 
 
 	//print_buffer();
@@ -311,6 +338,175 @@ void debug_buttons() {
 	}
 }
 
+uint8_t is_moved(int8_t diff) {
+	if (diff > 20 || diff < -20) {
+		return 1;
+	}
+	return 0;
+}
+
+char* calc_step_width(int8_t diff) {
+	if (diff > 80) {
+		return "1.0";
+	}
+	if (diff > 40) {
+		 return "0.5";
+	}
+	if (diff > 20) {
+		return "0.1";
+	}
+	if (diff < -80) {
+		return "-1.0";
+	}
+	else if (diff < -40) {
+		 return "-0.5";
+	}
+	else if (diff < -20) {
+		 return "-0.1";
+	}
+	return "0.0";
+}
+
+
+void jogging_nun_chuk() {
+	// read raw values
+	twiBuffer[0] = 0x00;
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
+	// this delay is very important here (should be between 200us and 1ms)
+	// apparently the extension need some time to process the data
+	_delay_us(500);
+	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
+	//print_buffer();
+
+	// debug button output
+	//debug_buttons();
+
+	uint8_t x_value = twiBuffer[0];
+	uint8_t y_value = twiBuffer[1];
+	int8_t x_diff = x_value - calib_x1; // can also be negative
+	int8_t y_diff = y_value - calib_y1; // can also be negative
+
+
+	gbuffer_reset();
+	gbuffer_push("G91G0X");
+	gbuffer_push(calc_step_width(x_diff));
+	gbuffer_push("Y");
+	gbuffer_push(calc_step_width(y_diff));
+	if (is_moved(x_diff) || is_moved(y_diff)) {
+		//printString(gbuffer);
+		//printString("\r\n");
+
+		gc_execute_line(gbuffer);
+	}
+
+	/*
+	print_uint8_base10(twiBuffer[0]);
+	printString(" - ");
+	print_uint8_base10(twiBuffer[1]);
+	printString("\r\n");
+	*/
+}
+
+
+void jogging_classic() {
+	// read raw values
+	twiBuffer[0] = 0x00;
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
+	// this delay is very important here (should be between 200us and 1ms)
+	// apparently the extension need some time to process the data
+	_delay_us(500);
+	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
+	//print_buffer();
+
+	// debug button output
+	//debug_buttons();
+
+
+	// handle home button separately
+	// if home button is pressed don't allow jogging
+	if (is_button_down(BTN_HOME)) {
+		home_button_counter++;
+		// if home button is pressed longer than (2 seconds)
+		// set zero for xyz
+		if (home_button_counter > 20) {
+			gc_execute_line("G92X0Y0Z0");
+			home_button_counter = 0;
+		}
+
+		// also allow quick reset for all axis
+		if (is_button_down(BTN_A)) {
+			gc_execute_line("G92X0Y0Z0");
+			home_button_counter = 0;
+		}
+
+
+		if (is_button_down(BTN_D_LEFT) || is_button_down(BTN_D_RIGHT)) {
+			// reset counter to prevent reset of all axis
+			home_button_counter = 0;
+			// reset x-axis
+			gc_execute_line("G10P0L20X0");
+		}
+
+		if (is_button_down(BTN_D_UP) || is_button_down(BTN_D_DOWN)) {
+			// reset counter to prevent reset of all axis
+			home_button_counter = 0;
+			// reset y-axis
+			gc_execute_line("G10P0L20Y0");
+		}
+
+		if (is_button_down(BTN_ZL) || is_button_down(BTN_ZR)) {
+			// reset counter to prevent reset of all axis
+			home_button_counter = 0;
+			// reset z-axis
+			gc_execute_line("G10P0L20Z0");
+		}
+
+	}
+	else {
+		home_button_counter = 0;
+
+		// default step width is 0.2
+		char* step_width = "0.1";
+		gbuffer_reset();
+
+		// check whether accelerated step width is selected
+		if (is_button_down(BTN_A)) {
+			step_width = "1.0";
+		}
+		else if (is_button_down(BTN_B)) {
+			step_width = "0.5";
+		}
+
+		if (is_button_down(BTN_D_RIGHT)) {
+			gbuffer_push("G91G0X");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
+		}
+		else if (is_button_down(BTN_D_DOWN)) {
+			gbuffer_push("G91G0Y-");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
+		}
+		else if (is_button_down(BTN_D_LEFT)) {
+			gbuffer_push("G91G0X-");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
+		}
+		else if (is_button_down(BTN_D_UP)) {
+			gbuffer_push("G91G0Y");
+			gbuffer_push(step_width);
+			gc_execute_line(gbuffer);
+		}
+		else if (is_button_down(BTN_ZL)) {
+			gc_execute_line("G91G0Z-0.2");
+		}
+		else if (is_button_down(BTN_ZR)) {
+			gc_execute_line("G91G0Z0.2");
+		}
+	}
+}
 
 
 void jogging()  {
@@ -335,102 +531,10 @@ void jogging()  {
 			return;
 		}
 
-
-		// read raw values
-		twiBuffer[0] = 0x00;
-		twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
-		// this delay is very important here (should be between 200us and 1ms)
-		// apparently the extension need some time to process the data
-		_delay_us(500);
-		twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
-
-		//print_buffer();
-
-		// debug button output
-		//debug_buttons();
-
-
-		// handle home button separately
-		// if home button is pressed don't allow jogging
-		if (is_button_down(BTN_HOME)) {
-			home_button_counter++;
-			// if home button is pressed longer than (2 seconds)
-			// set zero for xyz
-			if (home_button_counter > 20) {
-				gc_execute_line("G92X0Y0Z0");
-				home_button_counter = 0;
-			}
-
-			// also allow quick reset for all axis
-			if (is_button_down(BTN_A)) {
-				gc_execute_line("G92X0Y0Z0");
-				home_button_counter = 0;
-			}
-
-
-			if (is_button_down(BTN_D_LEFT) || is_button_down(BTN_D_RIGHT)) {
-				// reset counter to prevent reset of all axis
-				home_button_counter = 0;
-				// reset x-axis
-				gc_execute_line("G10P0L20X0");
-			}
-
-			if (is_button_down(BTN_D_UP) || is_button_down(BTN_D_DOWN)) {
-				// reset counter to prevent reset of all axis
-				home_button_counter = 0;
-				// reset y-axis
-				gc_execute_line("G10P0L20Y0");
-			}
-
-			if (is_button_down(BTN_ZL) || is_button_down(BTN_ZR)) {
-				// reset counter to prevent reset of all axis
-				home_button_counter = 0;
-				// reset z-axis
-				gc_execute_line("G10P0L20Z0");
-			}
-
+		switch(controllerEnabled) {
+		case CONTROLLER_NUN_CHUK : jogging_nun_chuk(); break;
+		case CONTROLLER_CLASSIC : jogging_classic(); break;
 		}
-		else {
-			home_button_counter = 0;
 
-			// default step width is 0.2
-			char* step_width = "0.1";
-			gbuffer_reset();
-
-			// check whether accelerated step width is selected
-			if (is_button_down(BTN_A)) {
-				step_width = "1.0";
-			}
-			else if (is_button_down(BTN_B)) {
-				step_width = "0.5";
-			}
-
-			if (is_button_down(BTN_D_RIGHT)) {
-				gbuffer_push("G91G0X");
-				gbuffer_push(step_width);
-				gc_execute_line(gbuffer);
-			}
-			else if (is_button_down(BTN_D_DOWN)) {
-				gbuffer_push("G91G0Y-");
-				gbuffer_push(step_width);
-				gc_execute_line(gbuffer);
-			}
-			else if (is_button_down(BTN_D_LEFT)) {
-				gbuffer_push("G91G0X-");
-				gbuffer_push(step_width);
-				gc_execute_line(gbuffer);
-			}
-			else if (is_button_down(BTN_D_UP)) {
-				gbuffer_push("G91G0Y");
-				gbuffer_push(step_width);
-				gc_execute_line(gbuffer);
-			}
-			else if (is_button_down(BTN_ZL)) {
-				gc_execute_line("G91G0Z-0.2");
-			}
-			else if (is_button_down(BTN_ZR)) {
-				gc_execute_line("G91G0Z0.2");
-			}
-		}
 	}
 }
