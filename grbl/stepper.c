@@ -20,6 +20,7 @@
 */
 
 #include "grbl.h"
+#include "jogging.h"
 
 
 // Some useful constants.
@@ -280,9 +281,17 @@ void st_go_idle()
 // with probing and homing cycles that require true real-time positions.
 ISR(TIMER1_COMPA_vect)
 {        
+#ifdef JOGPAD
+// If jogging flag is set, use own ISR
+  if (jog_active) {
+  	jog_isr();
+  	return;
+  	}
+#endif
+
 // SPINDLE_ENABLE_PORT ^= 1<<SPINDLE_ENABLE_BIT; // Debug: Used to time ISR
   if (busy) { return; } // The busy-flag is used to avoid reentering this interrupt
-  
+
   // Set the direction pins a couple of nanoseconds before we step the steppers
   DIRECTION_PORT = (DIRECTION_PORT & ~DIRECTION_MASK) | (st.dir_outbits & DIRECTION_MASK);
 
@@ -414,10 +423,20 @@ ISR(TIMER1_COMPA_vect)
 // completing one step cycle.
 ISR(TIMER0_OVF_vect)
 {
+  	
+  TCCR0B = 0; // Disable Timer0 to prevent re-entering this interrupt when it's not needed. 
+#ifdef JOGPAD
+// If jogging flag is set, use own ISR
+  if (jog_active) {
+  	return;
+  	}
+#endif
   // Reset stepping pins (leave the direction pins)
   STEP_PORT = (STEP_PORT & ~STEP_MASK) | (step_port_invert_mask & STEP_MASK); 
-  TCCR0B = 0; // Disable Timer0 to prevent re-entering this interrupt when it's not needed. 
 }
+
+
+
 #ifdef STEP_PULSE_DELAY
   // This interrupt is used only when STEP_PULSE_DELAY is enabled. Here, the step pulse is
   // initiated after the STEP_PULSE_DELAY time period has elapsed. The ISR TIMER2_OVF interrupt
@@ -426,7 +445,13 @@ ISR(TIMER0_OVF_vect)
   // st_wake_up() routine.
   ISR(TIMER0_COMPA_vect) 
   { 
-    STEP_PORT = st.step_bits; // Begin step pulse.
+#ifdef JOGPAD
+// If jogging flag is set, use own ISR
+  if (jog_active) {
+  	return;
+  	}
+#endif
+   STEP_PORT = st.step_bits; // Begin step pulse.
   }
 #endif
 
