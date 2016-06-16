@@ -35,8 +35,7 @@ int main(void)
   stepper_init();  // Configure stepper pins and interrupt timers
   system_init();   // Configure pinout pins and pin-change interrupt
   
-
-  memset(&sys, 0, sizeof(sys));  // Clear all system variables
+  memset(&sys, 0, sizeof(system_t));  // Clear all system variables
   sys.abort = true;   // Set abort to complete initialization
   sei(); // Enable interrupts
 
@@ -56,7 +55,6 @@ int main(void)
     sys.state = STATE_ALARM;
   #endif
   
-
   // Grbl initialization loop upon power-up or a system abort. For the latter, all processes
   // will return to this loop to be cleanly re-initialized.
   for(;;) {
@@ -85,7 +83,8 @@ int main(void)
     sys_rt_exec_state = 0;
     sys_rt_exec_alarm = 0;
     sys.suspend = false;
-          
+    sys.soft_limit = false;
+              
     // Start Grbl main loop. Processes program inputs and executes them.
     protocol_main_loop();
     
