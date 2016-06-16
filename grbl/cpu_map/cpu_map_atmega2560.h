@@ -136,3 +136,17 @@
   #define SPINDLE_PWM_PORT    PORTH
   #define SPINDLE_PWM_BIT		4 // MEGA2560 Digital Pin 97
 #endif // End of VARIABLE_SPINDLE
+
+
+#define JOGSW_DDR       DDRF
+#define JOGSW_PIN       PINF
+#define JOGSW_PORT      PORTF
+#define JOGSW_MASK      0x7F  // Bits 0..6 used
+#define JOGREV_X_BIT    0     // Switch input bits
+#define JOGFWD_X_BIT    1
+#define JOGREV_Y_BIT    2
+#define JOGFWD_Y_BIT    3
+#define JOGREV_Z_BIT    4
+#define JOGFWD_Z_BIT    5
+#define JOG_ZERO        6
+#define JOG_POT         7     // analog pin

@@ -188,6 +188,10 @@ void protocol_execute_realtime()
 
   do { // If system is suspended, suspend loop restarts here.
     
+#ifdef JOGPAD
+  jogpad_check();
+#endif
+
   // Check and execute alarms. 
   rt_exec = sys_rt_exec_alarm; // Copy volatile sys_rt_exec_alarm.
   if (rt_exec) { // Enter only if any bit flag is true

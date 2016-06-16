@@ -33,7 +33,7 @@ DEVICE     ?= atmega2560
 CLOCK      = 16000000
 PROGRAMMER ?= -c avrisp2 -P usb
 SOURCE    = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
-             protocol.c stepper.c eeprom.c settings.c planner.c nuts_bolts.c limits.c \
+             protocol.c stepper.c eeprom.c jogging.c settings.c planner.c nuts_bolts.c limits.c \
              print.c probe.c report.c system.c
 BUILDDIR = build
 SOURCEDIR = grbl
