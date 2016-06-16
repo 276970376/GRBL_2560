@@ -82,7 +82,7 @@ void jog_init() {
 	ADCSRA = ADCSRA_init;
 	ADMUX = ADMUX_init | JOG_POT; // Kanal, ADLAR =1 (left adjustet, 8-Bit-Result on ADCH)
 #else
-	dest_step_rate = 0x10;
+	dest_step_rate = 0x90;
 #endif
 
 }
@@ -229,7 +229,6 @@ void jogpad_check()
 		jog_select = 2;
 	}
 
-#ifdef USE_ADC_SPEED_CONTROL
 	// (JOG_MAX_SPEED-JOG_MIN_SPEED)/256
 	uint32_t max_frequ;
 
@@ -238,9 +237,13 @@ void jogpad_check()
 	max_frequ = (settings.max_rate[jog_select] * settings.steps_per_mm[jog_select]) / 60;// max_rate war in mm/min, max_freq in Hz
 	jog_speed_fac = (max_frequ - JOG_MIN_SPEED)/256;
 
+#ifdef USE_ADC_SPEED_CONTROL
 	dest_step_rate = ADCH;// set initial dest_step_rate according to analog input
-	dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
+#else
+	dest_step_rate = 0x90;
 #endif
+
+	dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
 
 	step_rate = JOG_MIN_SPEED;   // set initial step rate
 	jog_exit = 0;
@@ -368,6 +371,9 @@ void jogpad_check()
 		while (!(ADCSRA && (1<<ADIF))) {} // warte ggf. bis ADIF-Bit gesetzt
 		ADCSRA = ADCSRA_init;// exit conversion
 		dest_step_rate = ADCH;// set next dest_step_rate according to analog input
+		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
+#else
+		dest_step_rate = 0x90;// set next dest_step_rate according to analog input
 		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
 #endif
 
