@@ -21,7 +21,11 @@
 							<option id="de.innot.avreclipse.toolchain.options.toolchain.size.229258915" name="Print Size" superClass="de.innot.avreclipse.toolchain.options.toolchain.size"/>
 							<option id="de.innot.avreclipse.toolchain.options.toolchain.avrdude.1452317072" name="AVRDude" superClass="de.innot.avreclipse.toolchain.options.toolchain.avrdude"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="de.innot.avreclipse.targetplatform.avr.1136653694" name="AVR Cross-Target" osList="all" superClass="de.innot.avreclipse.targetplatform.avr"/>
-							<builder id="de.innot.avreclipse.target.builder.winavr.base.710223148" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="AVR GNU Make Builder" superClass="de.innot.avreclipse.target.builder.winavr.base"/>
+							<builder id="de.innot.avreclipse.target.builder.winavr.base.710223148" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="AVR GNU Make Builder" superClass="de.innot.avreclipse.target.builder.winavr.base">
+								<outputEntries>
+									<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="outputPath" name=""/>
+								</outputEntries>
+							</builder>
 							<tool id="de.innot.avreclipse.tool.assembler.winavr.base.1866130816" name="AVR Assembler" superClass="de.innot.avreclipse.tool.assembler.winavr.base">
 								<inputType id="de.innot.avreclipse.tool.assembler.input.667839583" superClass="de.innot.avreclipse.tool.assembler.input"/>
 							</tool>
@@ -29,6 +33,9 @@
 								<option id="de.innot.avreclipse.compiler.option.incpath.45915749" name="Include Paths (-I)" superClass="de.innot.avreclipse.compiler.option.incpath" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/GRBL_2560/grbl}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/GRBL_2560/grbl/cpu_map}&quot;"/>
+								</option>
+								<option id="de.innot.avreclipse.compiler.option.def.1408263658" name="Define Syms (-D)" superClass="de.innot.avreclipse.compiler.option.def" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="DEVICE=atmega2560"/>
 								</option>
 								<inputType id="de.innot.avreclipse.compiler.winavr.input.693163016" name="C Source Files" superClass="de.innot.avreclipse.compiler.winavr.input"/>
 							</tool>
