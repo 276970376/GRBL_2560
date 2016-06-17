@@ -36,14 +36,9 @@
 #include "report.h"
 #include "print.h"
 
-//#define USE_ADC_SPEED_CONTROL
 
 #define JOG_SPEED 0xA0
 
-#ifdef USE_ADC_SPEED_CONTROL
-#define ADCSRA_init 0x83  // AD enable, IRQ off, Prescaler 8
-#define ADMUX_init  0x20  // ADLAR =1 (left adjustet, 8-Bit-Result on ADCH)
-#endif
 
 uint16_t led_count = 0;
 uint8_t led_toggle;
@@ -80,13 +75,7 @@ void jog_init() {
 	JOGSW_DDR &= ~(JOGSW_MASK); // Set as input pins
 	JOGSW_PORT |= (JOGSW_MASK); // Enable internal pull-up resistors. Active low operation.
 
-#ifdef USE_ADC_SPEED_CONTROL
-	ADCSRA = ADCSRA_init;
-	ADMUX = ADMUX_init | JOG_POT; // Kanal, ADLAR =1 (left adjustet, 8-Bit-Result on ADCH)
-#else
 	dest_step_rate = JOG_SPEED;
-#endif
-
 }
 
 void jog_btn_release() {
@@ -190,12 +179,6 @@ void jogpad_check()
 		}
 	}
 
-#ifdef USE_ADC_SPEED_CONTROL
-	ADCSRA = ADCSRA_init | (1<<ADIF); //0x93, clear ADIF
-	ADCSRA = ADCSRA_init | (1<<ADIF);//0x93, clear ADIF
-	ADCSRA = ADCSRA_init | (1<<ADSC);//0xC3; start conversion
-#endif
-
 	sys.state = STATE_JOG;
 
 	// check for reverse switches
@@ -239,21 +222,12 @@ void jogpad_check()
 	max_frequ = (settings.max_rate[jog_select] * settings.steps_per_mm[jog_select]) / 60;// max_rate war in mm/min, max_freq in Hz
 	jog_speed_fac = (max_frequ - JOG_MIN_SPEED)/256;
 
-#ifdef USE_ADC_SPEED_CONTROL
-	dest_step_rate = ADCH;// set initial dest_step_rate according to analog input
-#else
 	dest_step_rate = JOG_SPEED;
-#endif
-
 	dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
 
 	step_rate = JOG_MIN_SPEED;   // set initial step rate
 	jog_exit = 0;
 
-#ifdef USE_ADC_SPEED_CONTROL
-	while (!(ADCSRA && (1<<ADIF))) {} // warte bis ADIF-Bit gesetzt
-	ADCSRA = ADCSRA_init;// exit conversion
-#endif
 
 	jog_bits_old = jog_bits;
 	i = 0;  // now index for sending position data
@@ -315,9 +289,6 @@ void jogpad_check()
 
 	for (;;) { // repeat until button/joystick released
 
-#ifdef USE_ADC_SPEED_CONTROL
-		ADCSRA = ADCSRA_init | (1<<ADIF); //0x93, clear ADIF
-#endif
 
 		// Get limit pin state
 		limit_state = limits_get_state(); //  LIMIT_MASK & (LIMIT_PIN ^ settings.invert_mask);
@@ -328,10 +299,6 @@ void jogpad_check()
 		if (step_delay > 65535) {
 			step_delay = 65535;
 		}
-
-#ifdef USE_ADC_SPEED_CONTROL
-		ADCSRA = ADCSRA_init | (1<<ADSC); //0xC3; start ADC conversion
-#endif
 
 		// jog_exit wird im ISR gesetzt sobald Stopp erreicht
 		if (jog_exit || (sys_rt_exec_state & EXEC_RESET)) {
@@ -369,15 +336,8 @@ void jogpad_check()
 
 		delay_us(100);	// wg. AD-Wandlung ohnehin benoetigt
 
-#ifdef USE_ADC_SPEED_CONTROL
-		while (!(ADCSRA && (1<<ADIF))) {} // warte ggf. bis ADIF-Bit gesetzt
-		ADCSRA = ADCSRA_init;// exit conversion
-		dest_step_rate = ADCH;// set next dest_step_rate according to analog input
-		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
-#else
 		dest_step_rate = JOG_SPEED;// set next dest_step_rate according to analog input
 		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
-#endif
 
 	}
 }
