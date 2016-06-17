@@ -42,7 +42,7 @@
 #include "print.h"
 
 
-#define JOG_SPEED 0xF0
+#define JOG_SPEED 0x150
 
 
 // WII Extension Controller ID
@@ -317,6 +317,12 @@ uint8_t read_jog_bits_wii() {
 	_delay_ms(1);
 	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
 
+
+	// only jog if button A (accellerate) is pressed
+	if (!is_button_down(BTN_A)) {
+		return 0;
+	}
+
 	// set jbits to be compatible with original jogging routines
 	if (is_button_down(BTN_D_LEFT)) {
 		jbits |= 1 << JOGREV_X_BIT;
@@ -538,7 +544,11 @@ void jogpad_check()
 			return;
 		}
 
+		// TODO update messate format (seems to be from c't)
+		// currently: <JogY,168.135>
+		// or: <JogX,-118.484>
 		//  report_realtime_status()  benoetigt viel Zeit, deshalb Minimalmeldung
+		/*
 		if (sys_rt_exec_state & EXEC_STATUS_REPORT) {
 			// status report requested, print short msg only
 			printPgmString(PSTR("<Jog"));
@@ -553,6 +563,7 @@ void jogpad_check()
 			serial_write(10);
 			sys_rt_exec_state = 0;
 		}
+		*/
 	}
 }
 
