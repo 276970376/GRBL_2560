@@ -1,8 +1,8 @@
 /*
-  jogging.h - code pertaining to jog switches
-  Part of Grbl
 
-  Copyright (c) 2014 Carsten Meyer
+  Copyright(c) 2016 Huy Do, huydo1@gmail.com
+
+  Based on work from Carsten Meyer (c't Make), cm@ct.de
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -16,10 +16,9 @@
 
   You should have received a copy of the GNU General Public License
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
-  
-  Jogging Q&D additions by cm, Make: magazin Deutschland
-  
+
 */
+
 
 #ifndef jogging_h
 #define jogging_h 
