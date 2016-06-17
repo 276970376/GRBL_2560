@@ -38,6 +38,8 @@
 
 //#define USE_ADC_SPEED_CONTROL
 
+#define JOG_SPEED 0xA0
+
 #ifdef USE_ADC_SPEED_CONTROL
 #define ADCSRA_init 0x83  // AD enable, IRQ off, Prescaler 8
 #define ADMUX_init  0x20  // ADLAR =1 (left adjustet, 8-Bit-Result on ADCH)
@@ -82,7 +84,7 @@ void jog_init() {
 	ADCSRA = ADCSRA_init;
 	ADMUX = ADMUX_init | JOG_POT; // Kanal, ADLAR =1 (left adjustet, 8-Bit-Result on ADCH)
 #else
-	dest_step_rate = 0x90;
+	dest_step_rate = JOG_SPEED;
 #endif
 
 }
@@ -240,7 +242,7 @@ void jogpad_check()
 #ifdef USE_ADC_SPEED_CONTROL
 	dest_step_rate = ADCH;// set initial dest_step_rate according to analog input
 #else
-	dest_step_rate = 0x90;
+	dest_step_rate = JOG_SPEED;
 #endif
 
 	dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
@@ -373,7 +375,7 @@ void jogpad_check()
 		dest_step_rate = ADCH;// set next dest_step_rate according to analog input
 		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
 #else
-		dest_step_rate = 0x90;// set next dest_step_rate according to analog input
+		dest_step_rate = JOG_SPEED;// set next dest_step_rate according to analog input
 		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
 #endif
 
@@ -399,11 +401,16 @@ void jog_isr() {
 				step_rate -= JOG_RAMP; // brake
 			}
 		} else {
-			if (step_rate > (JOG_MIN_SPEED * 2)) { // fast brake to complete stop
-				step_rate = ((step_rate * 99) / 100) - JOG_MIN_SPEED;
+			if (step_rate > (JOG_MIN_SPEED)) { // fast brake to complete stop
+				step_rate = step_rate - 10;
 			} else {
 				jog_exit = 1;
 			} // finished to stop and exit
+//			if (step_rate > (JOG_MIN_SPEED * 2)) { // fast brake to complete stop
+//				step_rate = ((step_rate * 99) / 100) - JOG_MIN_SPEED;
+//			} else {
+//				jog_exit = 1;
+//			} // finished to stop and exit
 		}
 
 		// Set stepping pins, nochmal invertieren

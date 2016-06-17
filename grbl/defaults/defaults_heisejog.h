@@ -64,7 +64,8 @@
   // Jogging by Make: Deutschland, Carsten Meyer
 
   #define JOGPAD
-  #define JOG_MIN_SPEED   25    // Hz, kleinste Geschwindigkeit, > 10!
+  //#define JOG_MIN_SPEED   25    // Hz, kleinste Geschwindigkeit, > 10!
+  #define JOG_MIN_SPEED   50    // Hz, kleinste Geschwindigkeit, > 10!
   #define JOG_RAMP        5    // Ramp speed inc/dec in us per loop (higher=faster)
 
 #endif
