@@ -45,6 +45,73 @@
 #define JOG_SPEED 0xA0
 
 
+// WII Extension Controller ID
+// see http://wiibrew.org/wiki/Wiimote/Extension_Controllers
+
+#define ID_CLASSIC_CONTROLLER 0xA4200101
+
+#define CONTROLLER_NONE 0
+#define CONTROLLER_NUN_CHUK 1
+#define CONTROLLER_CLASSIC 2
+
+
+#define PLANNER_BLOCK_COUNT_TRESHOLD 3
+#define MOTION_PLUS_ADR_ENABLE 0x53 // 0x53 << 1 = 0xA6
+#define MOTION_PLUS_ADR 0x52        // 0x52 << 1 = 0xA4
+#define GBUFFER_SIZE 32
+//#define DEFAULT_WAIT_TICKS 10
+#define DEFAULT_WAIT_TICKS 2
+
+
+// index 4
+#define DATA_D_RIGHT 7
+#define DATA_D_DOWN 6
+#define DATA_LT 5
+#define DATA_MINUS 4
+#define DATA_HOME 3
+#define DATA_PLUS 2
+#define DATA_RT 1
+
+// index 5
+#define DATA_ZL 7
+#define DATA_B 6
+#define DATA_Y 5
+#define DATA_A 4
+#define DATA_X 3
+#define DATA_ZR 2
+#define DATA_D_LEFT 1
+#define DATA_D_UP 0
+
+// user friendly defines for buttons
+#define BTN_D_UP 0
+#define BTN_D_DOWN 1
+#define BTN_D_LEFT 2
+#define BTN_D_RIGHT 3
+#define BTN_A 4
+#define BTN_B 5
+#define BTN_X 6
+#define BTN_Y 7
+#define BTN_LT 8
+#define BTN_RT 9
+#define BTN_MINUS 10
+#define BTN_PLUS 11
+#define BTN_HOME 12
+#define BTN_ZL 13
+#define BTN_ZR 14
+
+
+
+volatile uint32_t ticks;
+volatile uint32_t wait_ticks;
+volatile uint32_t idle_ticks;
+
+uint8_t twiBuffer[8];
+char gbuffer[32];
+uint8_t gbuffer_index = 0;
+uint8_t min_wait_ticks = DEFAULT_WAIT_TICKS;
+uint8_t controllerEnabled = 0; // jogging disabled if no controller is found
+uint8_t home_button_counter = 0;
+
 uint16_t led_count = 0;
 uint8_t led_toggle;
 uint32_t dest_step_rate, step_rate; // Step delay after pulse 
@@ -59,14 +126,36 @@ static volatile uint16_t skip_count;
 static uint32_t step_delay;
 static uint8_t limit_state;
 
-void jog_waitmsg() {
-	//  Falls waehrend Tastendruck von Spindel oder Zero eine Status-Anfrage kommt
-	if (sys_rt_exec_state & EXEC_STATUS_REPORT) {
-		// status report requested, print short msg only
-		printPgmString(PSTR("<JogF>\r\n"));
-		sys_rt_exec_state = 0;
-	}
+
+// called every 10ms
+ISR(TIMER5_COMPA_vect, ISR_BLOCK) {
+	ticks++;
+	wait_ticks++;
+	idle_ticks++;
 }
+
+
+void gbuffer_reset() {
+	gbuffer_index = 0;
+}
+
+void gbuffer_push(char* data) {
+	while (*data && gbuffer_index < GBUFFER_SIZE) {
+		gbuffer[gbuffer_index++] = *data++;
+	}
+	gbuffer[gbuffer_index] = 0; // 0 terminated string
+}
+
+
+void init_systicks() {
+	TCCR5B = _BV(CS52) | _BV(CS50) | _BV(WGM52); // prescale 1024 and MODE CTC
+	TCCR5A = 0; // MODE CTC (see datasheet)
+	TIMSK5 = (1 << OCIE5A); // enable compare match interrupt
+
+	// 16000000/1024/156 == 100HZ -> 10 ms
+	OCR5A = 155; // !!! must me set last or it will not work!
+}
+
 
 void jog_init() {
 
@@ -81,17 +170,178 @@ void jog_init() {
 	JOGSW_PORT |= (JOGSW_MASK); // Enable internal pull-up resistors. Active low operation.
 
 	dest_step_rate = JOG_SPEED;
+
+	// Initialize jog switch port bits and DDR
+	JOG_DDR &= ~(_BV(JOG_SDA) | _BV(JOG_SCL)); // TWI pins as input
+	JOG_PORT |= _BV(JOG_SDA) | _BV(JOG_SCL);   // Enable internal pull-up resistors. Active low operation.
+
+	twi_init();
+	init_systicks();
+
+	/*
+	 * NEW WAY INIT (see http://wiibrew.org/wiki/Wiimote/Extension_Controllers#Wii_Motion_Plus)
+	 */
+
+	twiBuffer[0] = 0xF0; twiBuffer[1] = 0x55;    // active extension and disable encryption
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 2, 1);
+	_delay_us(1000); // the nunchuk needs some time to process
+
+	twiBuffer[0] = 0xFB; twiBuffer[1] = 0x00;   // disable encryption
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 2, 1);
+	_delay_us(1000); // the nunchuk needs some time to process
+
+	// read ID of extension
+	twiBuffer[0] = 0xFA;	// register adress of identification bytes
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
+	_delay_us(500);
+	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
+	// test id value of controller
+	uint32_t id_value = ((uint32_t) twiBuffer[2] << 24) + ((uint32_t) twiBuffer[3] << 16) + ((uint32_t)twiBuffer[4] << 8) + ((uint32_t)twiBuffer[5]);
+
+	// DEBUG
+	//print_uint32_base10(id_value);
+
+	controllerEnabled = CONTROLLER_NONE;
+	if (id_value == ID_CLASSIC_CONTROLLER) {
+		controllerEnabled = CONTROLLER_CLASSIC;
+	}
+
+	// the following is not clean but useful to see:
+	// set status for report (via $$)
+	// report_set_controller_available(controllerEnabled);
+
+	//print_buffer();
+
+	// initial read out
+	_delay_us(1000);
+	twiBuffer[0] = 0x0;
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
+	_delay_ms(1); // the nunchuk needs some time to process
+	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
+
+
 }
 
-void jog_btn_release() {
-	uint8_t jog_bits;
-	do {
-		jog_bits = (~JOGSW_PIN) & JOGSW_MASK; // active low
-		// geht nicht, weil wir daraus aufgerufen werden:
-		// protocol_execute_realtime(); // process the serial protocol while waiting
-		jog_waitmsg();
-		delay_ms(10);
-	} while (jog_bits); // until released
+uint8_t is_button_down(uint8_t button) {
+	switch(button) {
+	case BTN_D_UP : return !(twiBuffer[5] & (1 << DATA_D_UP)); break;
+	case BTN_D_DOWN : return !(twiBuffer[4] & (1 << DATA_D_DOWN)); break;
+	case BTN_D_LEFT : return !(twiBuffer[5] & (1 << DATA_D_LEFT)); break;
+	case BTN_D_RIGHT : return !(twiBuffer[4] & (1 << DATA_D_RIGHT)); break;
+	case BTN_A : return !(twiBuffer[5] & (1 << DATA_A)); break;
+	case BTN_B : return !(twiBuffer[5] & (1 << DATA_B)); break;
+	case BTN_X : return !(twiBuffer[5] & (1 << DATA_X)); break;
+	case BTN_Y : return !(twiBuffer[5] & (1 << DATA_Y)); break;
+	case BTN_LT : return !(twiBuffer[4] & (1 << DATA_LT)); break;
+	case BTN_RT : return !(twiBuffer[4] & (1 << DATA_RT)); break;
+	case BTN_MINUS : return !(twiBuffer[4] & (1 << DATA_MINUS)); break;
+	case BTN_PLUS : return !(twiBuffer[4] & (1 << DATA_PLUS)); break;
+	case BTN_HOME : return !(twiBuffer[4] & (1 << DATA_HOME)); break;
+	case BTN_ZL : return !(twiBuffer[5] & (1 << DATA_ZL)); break;
+	case BTN_ZR : return !(twiBuffer[5] & (1 << DATA_ZR)); break;
+	}
+	return 0;
+}
+
+void debug_buttons() {
+	if (is_button_down(BTN_D_RIGHT)) {
+		printString("DR\r\n");
+	}
+	else if (is_button_down(BTN_D_DOWN)) {
+		printString("DD\r\n");
+	}
+	else if (is_button_down(BTN_D_LEFT)) {
+		printString("DL\r\n");
+	}
+	else if (is_button_down(BTN_D_UP)) {
+		printString("DU\r\n");
+	}
+	else if (is_button_down(BTN_A)) {
+		printString("A\r\n");
+	}
+	else if (is_button_down(BTN_B)) {
+		printString("B\r\n");
+	}
+	else if (is_button_down(BTN_X)) {
+		printString("X\r\n");
+	}
+	else if (is_button_down(BTN_Y)) {
+		printString("Y\r\n");
+	}
+	else if (is_button_down(BTN_LT)) {
+		printString("LT\r\n");
+	}
+	else if (is_button_down(BTN_RT)) {
+		printString("RT\r\n");
+	}
+	else if (is_button_down(BTN_MINUS)) {
+		printString("-\r\n");
+	}
+	else if (is_button_down(BTN_PLUS)) {
+		printString("+\r\n");
+	}
+	else if (is_button_down(BTN_HOME)) {
+		printString("H\r\n");
+	}
+	else if (is_button_down(BTN_ZL)) {
+		printString("ZL\r\n");
+	}
+	else if (is_button_down(BTN_ZR)) {
+		printString("ZR\r\n");
+	}
+}
+
+
+uint8_t read_jog_bits_digital() {
+	// read from digital buttons
+	return 	(~JOGSW_PIN) & JOGSW_MASK; // active low
+}
+
+uint8_t read_jog_bits_wii() {
+	// read from controller
+	// if there is no controller return 0
+	if (!controllerEnabled) {
+		return 0;
+	}
+	uint8_t jbits = 0;
+
+	// read raw values
+	twiBuffer[0] = 0x00;
+	twi_writeTo(WIIEXT_TWI_ADDR, twiBuffer, 1, 1);
+
+	// this delay is very important here (should be between 200us and 1ms)
+	// apparently the extension need some time to process the data
+	// _delay_us(500);
+	_delay_ms(1);
+	twi_readFrom(WIIEXT_TWI_ADDR, twiBuffer, 6);
+
+	// set jbits to be compatible with original jogging routines
+	if (is_button_down(BTN_D_LEFT)) {
+		jbits |= 1 << JOGREV_X_BIT;
+	}
+	if (is_button_down(BTN_D_RIGHT)) {
+		jbits |= 1 << JOGFWD_X_BIT;
+	}
+	if (is_button_down(BTN_D_DOWN)) {
+		jbits |= 1 << JOGREV_Y_BIT;
+	}
+	if (is_button_down(BTN_D_UP)) {
+		jbits |= 1 << JOGFWD_Y_BIT;
+	}
+	if (is_button_down(BTN_LT)) {
+		jbits |= 1 << JOGREV_Z_BIT;
+	}
+	if (is_button_down(BTN_RT)) {
+		jbits |= 1 << JOGFWD_Z_BIT;
+	}
+	// DEBUG
+	if (jbits >  0) {
+		print_uint32_base10(jbits);
+		printString("\r\n");
+	}
+	return jbits;
 }
 
 void jogpad_check()
@@ -102,7 +352,6 @@ void jogpad_check()
 	reverse_flag = 0;
 	jog_select = 0;
 	jog_bits = 0;
-	uint8_t i;
 
 #ifdef LED_PRESENT
 	switch (sys.state) {
@@ -137,52 +386,10 @@ void jogpad_check()
 
 	last_sys_state = sys.state;
 
-	jog_bits = (~JOGSW_PIN) & JOGSW_MASK; // active low
+	jog_bits = read_jog_bits_wii();
 	if (!jog_bits) {
 		return;
 	}  // nothing pressed
-
-	// At least one jog/joystick switch is active
-	if (jog_bits & (1 << JOG_ZERO)) {     // Zero-Button gedrueckt
-		jog_btn_release();
-		sys.state = last_sys_state;
-		if (bit_isfalse(CONTROL_PIN, bit(RESET_BIT))) { // RESET und zusaetzlich ZERO gedrueckt: Homing
-			if (bit_istrue(settings.flags, BITFLAG_HOMING_ENABLE)) {
-				// Only perform homing if Grbl is idle or lost.
-				if (sys.state == STATE_IDLE || sys.state == STATE_ALARM) {
-					// Search to engage all axes limit switches at faster homing seek rate.
-					limits_go_home(HOMING_CYCLE_0);  // Homing cycle 0
-#ifdef HOMING_CYCLE_1
-					limits_go_home(HOMING_CYCLE_1);  // Homing cycle 1
-#endif
-#ifdef HOMING_CYCLE_2
-					limits_go_home(HOMING_CYCLE_2);  // Homing cycle 2
-#endif
-					if (!sys.abort) {
-						protocol_auto_cycle_start();
-					} // Execute startup scripts after successful homing.
-				}
-			}
-		} else {
-
-//  gc_state.position[N_AXIS];      // Where the interpreter considers the tool to be at this point in the code
-//  gc_state.coord_system[N_AXIS];  // Current work coordinate system (G54+). Stores offset from absolute machine
-			// position in mm. Loaded from EEPROM when called.
-//  gc_state.coord_offset[N_AXIS];  // Retains the G92 coordinate offset (work coordinates) relative to
-			// machine zero in mm. Non-persistent. Cleared upon reset and boot.
-
-			for (i = 0; i < N_AXIS; i++) { // Axes indices are consistent, so loop may be used.
-
-				if (i == Z_AXIS) {
-					gc_state.coord_offset[i] = gc_state.position[i] - 10;
-				} else {
-					gc_state.coord_offset[i] = gc_state.position[i];
-				}
-			}
-
-			return;
-		}
-	}
 
 	sys.state = STATE_JOG;
 
@@ -235,7 +442,7 @@ void jogpad_check()
 
 
 	jog_bits_old = jog_bits;
-	i = 0;  // now index for sending position data
+	//uint8_t i = 0;  // now index for sending position data
 
 	float mm_per_step;
 
@@ -292,12 +499,18 @@ void jogpad_check()
 	OCR1A = step_delay;
 	TIMSK1 |= (1 << OCIE1A);  // Timer 1 starten
 
+	wait_ticks = 0;
 	for (;;) { // repeat until button/joystick released
-
 
 		// Get limit pin state
 		limit_state = limits_get_state(); //  LIMIT_MASK & (LIMIT_PIN ^ settings.invert_mask);
-		jog_bits = (~JOGSW_PIN) & JOGSW_MASK; // active low, neu abfragen weil in der Schleife
+
+		// only read new value after every x ticks
+		if (wait_ticks > min_wait_ticks) {
+			wait_ticks = 0;
+			jog_bits = read_jog_bits_wii(); // neu abfragen weil in der Schleife
+		}
+
 		step_delay = (1710000 / step_rate); //
 
 		// Maximaler Wert fuer 16-Bit-Timer darf nicht ueberschritten werden
@@ -338,12 +551,6 @@ void jogpad_check()
 			serial_write(10);
 			sys_rt_exec_state = 0;
 		}
-
-		delay_us(100);	// wg. AD-Wandlung ohnehin benoetigt
-
-		dest_step_rate = JOG_SPEED;// set next dest_step_rate according to analog input
-		dest_step_rate = (dest_step_rate * jog_speed_fac) + JOG_MIN_SPEED;
-
 	}
 }
 
