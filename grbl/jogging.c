@@ -42,7 +42,7 @@
 #include "print.h"
 
 
-#define JOG_SPEED 0xA0
+#define JOG_SPEED 0xF0
 
 
 // WII Extension Controller ID
@@ -330,17 +330,19 @@ uint8_t read_jog_bits_wii() {
 	if (is_button_down(BTN_D_UP)) {
 		jbits |= 1 << JOGFWD_Y_BIT;
 	}
-	if (is_button_down(BTN_LT)) {
+	if (is_button_down(BTN_RT)) {
 		jbits |= 1 << JOGREV_Z_BIT;
 	}
-	if (is_button_down(BTN_RT)) {
+	if (is_button_down(BTN_LT)) {
 		jbits |= 1 << JOGFWD_Z_BIT;
 	}
 	// DEBUG
+	/*
 	if (jbits >  0) {
 		print_uint32_base10(jbits);
 		printString("\r\n");
 	}
+	*/
 	return jbits;
 }
 
